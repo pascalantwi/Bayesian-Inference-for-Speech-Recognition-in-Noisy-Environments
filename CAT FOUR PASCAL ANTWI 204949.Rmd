@@ -1,0 +1,352 @@
+---
+title: '#Bayesian Inference for Speech Recognition in Noisy Environments'
+author: "ANTWI PASCAL 204949"
+date: "2025-04-03"
+output:
+  html_document:
+    df_print: paged
+  word_document: default
+---
+####----- INTRODUCTION -----
+#Speech recognition in noisy environments is hindered by distorted acoustic features.Bayesian inference provides a principled statistical framework for refining phoneme feature estimates.
+
+####----#OBJECTIVE:-----
+#1. Assess the impact of noise variance on posterior estimates.
+#2. Extend the model to account for phoneme-specific noise levels.
+#3. Compare Bayesian methodologies with baseline recognition techniques.
+
+
+#### ---- METHODOLOGY ----
+#Bayesian Model Specification
+#Prior and Likelihood Specification:
+
+#μ_j ∼N(μ_0,Σ_0) for prior and y|μ_j ∼ N(μ_j,Σ), where μ_0 and Σ_0 are derived from high-quality recordings.
+
+#Inference Techniques:
+#Monte Carlo Sampling: Samples drawn from posterior: μ_j|y ∼ N(μ_post,Σ_post)
+#Gibbs Sampling: Iterative conditional sampling.
+
+#Model Extension: Phoneme-Specific Noise
+
+#Noise covariance Σ_j varies across phonemes.
+#Modified observation model: y|μ_j ∼ N(μ_j,Σ_j). Bayesian approach is compared with baseline methods (Maximum Likelihood Estimation) under varying noise conditions.(μ)MLE = argmaxP(y|μ)  and y ∼ N(μ, Σ).
+
+
+
+
+# CODES:
+#Simulation Results: Effect of Noise Variance (for different noise level) Using Monte carlo and Gibbs Sampling for Different  phonemes
+#According to Gong, Y. (1995), the below prior parameters were used.
+```{r}
+# Load necessary libraries
+library(MASS)  # For multivariate normal distribution sampling
+library(ggplot2)  # For visualization
+library(gridExtra)
+#### ---- DIRECT MONTE CARLO ----
+# Set parameters for the simulation
+set.seed(8201)  # Ensure reproducibility
+num_samples <- 100000  # Number of samples to draw from the prior
+mu_0 <- c(2.8, 4.6)  # Prior mean for the feature vector
+Sigma_0 <- diag(2)  # Prior covariance matrix (identity matrix)
+
+# Define different noise levels for different phonemes (Question 2: Model Extension)
+noise_levels <- seq(0.1, 1, length.out = 10)  # Noise levels from 0.1 to 1
+phoneme_noise_levels <- lapply(noise_levels, function(n) diag(n, 2))  # Create different noise matrices
+
+# Store results
+results <- list()
+posterior_means <- data.frame(noise_level = numeric(), mean_x_mc = numeric(), mean_y_mc = numeric(), mean_x_gibbs = numeric(), mean_y_gibbs = numeric())
+posterior_covariances <- list()
+
+# Loop through different noise levels
+for (Sigma_matrix in phoneme_noise_levels) {
+  Sigma_noise <- Sigma_matrix[1,1]  # Extract noise level for tracking
+  
+# Simulate samples from the prior distribution
+mu_samples <- mvrnorm(n = num_samples, mu = mu_0, Sigma = Sigma_0)
+  
+# Simulate observed data with noise (Question 1: Noise Impact)
+observed_data <- mu_samples + mvrnorm(n = num_samples, mu = c(0, 0), Sigma = Sigma_matrix)
+  
+# Monte Carlo posterior estimates (Inference Task 1: Direct Monte Carlo)
+posterior_mean_mc <- colMeans(observed_data)  # Compute posterior mean
+posterior_cov_mc <- cov(observed_data)  # Compute posterior covariance
+  
+#### ---- GIBBS SAMPLING ----
+# Gibbs Sampling to refine the posterior estimates (Inference Task 2: Gibbs Sampling)
+num_iterations <- 100000  # Number of iterations for Gibbs sampling
+gibbs_samples <- matrix(0, nrow = num_iterations, ncol = 2)  # Storage for Gibbs samples
+current_sample <- posterior_mean_mc  # Initialize the Gibbs sampler
+  
+for (i in 1:num_iterations) {
+    # Sample x given y
+    current_sample[1] <- rnorm(1, mean = posterior_mean_mc[2], sd = sqrt(Sigma_noise))
+    # Sample y given x
+    current_sample[2] <- rnorm(1, mean = posterior_mean_mc[1], sd = sqrt(Sigma_noise))
+    gibbs_samples[i, ] <- current_sample  # Store the sample
+  }
+  
+  # Compute refined posterior estimates from Gibbs samples
+  refined_posterior_mean_gibbs <- colMeans(gibbs_samples)
+  refined_posterior_cov_gibbs <- cov(gibbs_samples)
+  
+  # Store results
+  results[[as.character(Sigma_noise)]] <- list(
+    mean_mc = posterior_mean_mc,
+    covariance_mc = posterior_cov_mc,
+    mean_gibbs = refined_posterior_mean_gibbs,
+    covariance_gibbs = refined_posterior_cov_gibbs
+  )
+  
+  posterior_covariances[[as.character(Sigma_noise)]] <- list(
+    mc_cov = posterior_cov_mc,
+    gibbs_cov = refined_posterior_cov_gibbs
+  )
+  
+  # Store posterior means for plotting
+  posterior_means <- rbind(posterior_means, data.frame(
+    noise_level = Sigma_noise,
+    mean_x_mc = posterior_mean_mc[1],
+    mean_y_mc = posterior_mean_mc[2],
+    mean_x_gibbs = refined_posterior_mean_gibbs[1],
+    mean_y_gibbs = refined_posterior_mean_gibbs[2]
+  ))
+}
+
+# Print Noise Impact results
+print("Posterior Estimates")
+print(posterior_means)
+print("Posterior Covariances")
+print(posterior_covariances)
+
+```
+
+#The prior mean for the feature vector ranges from 2.8 to 4.6, with posterior mean estimates demonstrating stability across noise variations (Σ from 0.1 to 1.0). Monte Carlo sampling produces more precise estimates than Gibbs sampling, with Mean X ranging from 2.800659 to 2.802007 and Mean Y from 4.596531 to 4.600894. In contrast, Gibbs sampling yields a slightly wider range: Mean X varies between 2.800524 and 2.803563, while Mean Y fluctuates from 4.595981 to 4.596726. Posterior covariance increases with noise, reflecting greater uncertainty. Notably, Gibbs sampling exhibits a much slower variance growth compared to Monte Carlo sampling. For 0.1 That is Monte Carlo Covariance: [ 1.1084 −0.0011 −0.0011 1.0967 ] and Gibbs Sampling Covariance: [ 0.1003 −0.0002 −0.0002 0.0996 ] and for 1.0 Monte Carlo Covariance: 2.0021 0.0101 0.0101 2.0084 ] and Gibbs Sampling Covariance: [ 1.000 −0.0016 −0.0016 1.003 ].
+#These results highlight that while Monte Carlo sampling yields more precise posterior mean estimates, its covariance growth under noise is substantially higher than that of Gibbs sampling, indicating that Gibbs sampling provides more stable uncertainty estimates in high-noise conditions.
+
+
+
+#plot for Impact of noise level for the Gibbs and Monte Carlo posterior variance and covariance estimates 
+```{r}
+# Plot posterior mean estimates vs. noise level 
+plot1 = ggplot(posterior_means, aes(x = noise_level)) +
+  geom_line(aes(y = mean_x_mc, color = "Mean X (Monte Carlo)")) +
+  geom_line(aes(y = mean_y_mc, color = "Mean Y (Monte Carlo)")) +
+  geom_line(aes(y = mean_x_gibbs, color = "Mean X (Gibbs)"), linetype = "dashed") +
+  geom_line(aes(y = mean_y_gibbs, color = "Mean Y (Gibbs)"), linetype = "dashed") +
+  labs(title = "Effect of Noise Level on Posterior Mean Estimates",
+       x = "Noise Level",
+       y = "Posterior Mean",
+       color = "Legend") +
+  theme_minimal()
+plot1
+
+
+```
+#From the plot, Posterior mean estimates remain stable despite increasing noise levels.
+
+
+# Density Plots for Direct Monte Carlo and the Gibbs Sampling Methods 
+```{r}
+
+#### ---- DENSITY PLOTS ON THE SAME PLOT ----
+# Create data frames for plotting
+mc_df <- as.data.frame(observed_data)
+gibbs_df <- as.data.frame(gibbs_samples)
+colnames(mc_df) <- c("value")
+colnames(gibbs_df) <- c("value")
+
+mc_df$method <- "Monte Carlo"
+gibbs_df$method <- "Gibbs Sampling"
+
+# Combine data for plotting
+plot_data_x <- rbind(data.frame(value = mc_df$value, method = mc_df$method, variable = "x"),
+                     data.frame(value = gibbs_df$value, method = gibbs_df$method, variable = "x"))
+
+plot_data_y <- rbind(data.frame(value = mc_df$value, method = mc_df$method, variable = "y"),
+                     data.frame(value = gibbs_df$value, method = gibbs_df$method, variable = "y"))
+
+# Density plot for x
+density_plot_x <- ggplot(plot_data_x, aes(x = value, fill = method, color = method)) +
+  geom_density(alpha = 0.3) +
+  geom_vline(data = posterior_means[posterior_means$noise_level == Sigma_noise, ],
+             aes(xintercept = mean_x_mc, color = "Monte Carlo"),
+             linetype = "dashed", size = 0.8) +
+  geom_vline(data = posterior_means[posterior_means$noise_level == Sigma_noise, ],
+             aes(xintercept = mean_x_gibbs, color = "Gibbs Sampling"),
+             linetype = "dashed", size = 0.8) +
+  labs(title = paste("Density of x - Noise:", Sigma_noise), x = "x", y = "Density", fill = "Method", color = "Method") +
+  theme_minimal()
+
+# Density plot for y
+density_plot_y <- ggplot(plot_data_y, aes(x = value, fill = method, color = method)) +
+  geom_density(alpha = 0.3) +
+  geom_vline(data = posterior_means[posterior_means$noise_level == Sigma_noise, ],
+             aes(xintercept = mean_y_mc, color = "Monte Carlo"),
+             linetype = "dashed", size = 0.8) +
+  geom_vline(data = posterior_means[posterior_means$noise_level == Sigma_noise, ],
+             aes(xintercept = mean_y_gibbs, color = "Gibbs Sampling"),
+             linetype = "dashed", size = 0.8) +
+  labs(title = paste("Density of y - Noise:", Sigma_noise), x = "y", y = "Density", fill = "Method", color = "Method") +
+  theme_minimal()
+# Arrange and display the density plots
+density_plots <- grid.arrange(density_plot_x, density_plot_y, nrow = 1)
+print(density_plots)
+
+
+```
+
+#The plots show overlapping density estimates for 'x' and 'y' from Monte Carlo (teal) and Gibbs Sampling (red) at noise=1. The vertical lines indicate the mean estimates. Based solely on the Noise Level 1 density plots and the prior mean (μ_0[2.8,4.6]), Monte Carlo estimates remain close to the prior, suggesting it's heavily influenced by it under high noise. Gibbs Sampling shifts away from the prior (x towards 4.6, y towards 2.8), indicating an attempt to update beliefs based on noisy data. 
+
+#Trace  Plots for the Gibbs Sampling Methods 
+```{r}
+
+#### ---- TRACE PLOTS ----
+# Create data frame for Gibbs samples for trace plots
+gibbs_trace_df <- as.data.frame(gibbs_samples)
+gibbs_trace_df$iteration <- 1:nrow(gibbs_trace_df)
+colnames(gibbs_trace_df) <- c("x", "y", "iteration")
+
+# Trace plot for x
+trace_plot_x <- ggplot(gibbs_trace_df, aes(x = iteration, y = x)) +
+  geom_line() +
+  labs(title = paste("Trace Plot of x - Noise:", Sigma_noise), x = "Iteration", y = "Sampled x") +
+  theme_minimal()
+
+# Trace plot for y
+trace_plot_y <- ggplot(gibbs_trace_df, aes(x = iteration, y = y)) +
+  geom_line() +
+  labs(title = paste("Trace Plot of y - Noise:", Sigma_noise), x = "Iteration", y = "Sampled y") +
+  theme_minimal()
+
+# Arrange and display the trace plots
+trace_plots <- grid.arrange(trace_plot_x, trace_plot_y, nrow = 2)
+trace_plots
+
+```
+
+#The trace plots for x and y under noise level 1 show good mixing and stationarity, indicating that the Gibbs sampler has converged, suggesting effective exploration of the posterior distribution over the 100,000 iterations.
+
+
+
+# Credible Confidence Interval for both the Direct Monte Carlo and the Gibbs Sampling
+```{r}
+
+
+# Store credible intervals for means
+credible_intervals_means <- list()
+
+# Loop through different noise levels
+for (Sigma_matrix in phoneme_noise_levels) {
+  Sigma_noise <- Sigma_matrix[1,1]
+  
+  # Simulate observed data with noise (Direct Monte Carlo approximation of posterior)
+  mu_samples <- mvrnorm(n = num_samples, mu = mu_0, Sigma = Sigma_0)
+  observed_data <- mu_samples + mvrnorm(n = num_samples, mu = c(0, 0), Sigma = Sigma_matrix)
+  
+  # Calculate 95% credible intervals for MC mean
+  ci_mean_x_mc <- quantile(observed_data[, 1], probs = c(0.025, 0.975))
+  ci_mean_y_mc <- quantile(observed_data[, 2], probs = c(0.025, 0.975))
+  
+  #### ---- GIBBS SAMPLING ----
+  num_iterations <- 10000
+  gibbs_samples <- matrix(0, nrow = num_iterations, ncol = 2)
+  current_sample <- colMeans(observed_data) # Initialize with MC mean
+  
+  for (i in 1:num_iterations) {
+    current_sample[1] <- rnorm(1, mean = current_sample[2], sd = sqrt(Sigma_noise))
+    current_sample[2] <- rnorm(1, mean = current_sample[1], sd = sqrt(Sigma_noise))
+    gibbs_samples[i, ] <- current_sample
+  }
+  
+  # Calculate 95% credible intervals for Gibbs mean
+  ci_mean_x_gibbs <- quantile(gibbs_samples[, 1], probs = c(0.025, 0.975))
+  ci_mean_y_gibbs <- quantile(gibbs_samples[, 2], probs = c(0.025, 0.975))
+  
+  # Store credible intervals for means
+  credible_intervals_means[[as.character(Sigma_noise)]] <- list(
+    mc = list(x = ci_mean_x_mc, y = ci_mean_y_mc),
+    gibbs = list(x = ci_mean_x_gibbs, y = ci_mean_y_gibbs)
+  )
+}
+
+# Print the credible intervals for means
+print("95% Credible Intervals for Means:")
+print(credible_intervals_means)
+
+```
+#As noise increases from 0.1 to 1, the 95% credible intervals from the direct Monte Carlo for the mean estimate remain narrow and centered, indicating stability. In contrast, Gibbs sampling intervals become increasingly wide, erratic, and shift from plausible values. 
+
+
+#Recognition Accuracy  for Bayesian and Baseline Model
+```{r}
+#### ---- SIMULATE RECOGNITION ACCURACY ----
+# Compare Bayesian method vs. Baseline method
+bayesian_accuracy <- numeric(length(noise_levels))
+baseline_accuracy <- numeric(length(noise_levels))
+
+simulate_accuracy <- function(Sigma_matrix) {
+  # Generate noisy observations
+  observed_data <- mu_samples + mvrnorm(n = num_samples, mu = c(0, 0), Sigma = Sigma_matrix)
+  
+  # Bayesian estimate
+  bayesian_estimate <- colMeans(observed_data)
+  bayesian_accuracy <- mean(sqrt(rowSums((observed_data - bayesian_estimate)^2)))
+  
+  # Baseline estimate (prior mean)
+  baseline_estimate <- colMeans(mu_samples)
+  baseline_accuracy <- mean(sqrt(rowSums((observed_data - baseline_estimate)^2)))
+  
+  return(c(bayesian_accuracy, baseline_accuracy))
+}
+
+# Compute accuracy for different noise levels
+for (i in seq_along(phoneme_noise_levels)) {
+  accuracies <- simulate_accuracy(phoneme_noise_levels[[i]])
+  bayesian_accuracy[i] <- accuracies[1]
+  baseline_accuracy[i] <- accuracies[2]
+}
+
+# Store accuracy results
+accuracy_results <- data.frame(Noise_Level = noise_levels, Bayesian_Accuracy = bayesian_accuracy, Baseline_Accuracy = baseline_accuracy)
+accuracy_results
+# Print Application Evaluation results
+print("Application Evaluation - Recognition Accuracy Comparison")
+print(accuracy_results)
+
+```
+#With a noise level 0.1 to 1, the Baseline Approach RMSE moves from  2.141824 to 2.423309 and the Bayesian Approach moves 2.141253 to 2.421648. Even though the difference is not that significant but the Bayesian Model approach exhibits slightly superior performance in high-noise conditions.
+
+
+
+
+# Plot of Recognition Accuracy  for Bayesian and Baseline Model
+```{r}
+# Plot recognition accuracy comparison
+plot2 = ggplot(accuracy_results, aes(x = Noise_Level)) + 
+  geom_line(aes(y = Bayesian_Accuracy, color = 'Bayesian Method')) + 
+  geom_line(aes(y = Baseline_Accuracy, color = 'Baseline Method')) + 
+  labs(title = 'Recognition Accuracy vs Noise Level', 
+       x = 'Noise Level', 
+       y = 'Root Mean Square Error (RMSE)') + 
+  scale_color_manual(values = c('Bayesian Method' = 'blue', 'Baseline Method' = 'red')) + 
+  theme_minimal()
+
+plot2
+
+```
+Bayesian Model (Blue) approach exhibits slightly superior performance in high-noise conditions than Baseline (Red).
+
+
+####-----RESULTS AND DISCUSSION ----
+#Bayesian inference refines phoneme estimation under noise, outperforming traditional methods. Monte Carlo sampling offers precise estimates under the mean but exhibits higher covariance growth, while Gibbs sampling provides more stable uncertainty quantification under the covariance estimate. The Bayesian approach consistently achieves lower RMSE, demonstrating resilience in high-noise conditions. These findings highlight its potential for robust speech recognition in challenging acoustic environments.
+
+####----CONCLUSION-----
+#Bayesian inference proves to be a robust framework for speech recognition in noisy environments, effectively refining phoneme estimates while maintaining stability under increasing noise levels. Monte Carlo sampling yields more precise estimates, though Gibbs sampling exhibits more controlled covariance growth. The Bayesian approach consistently outperforms traditional methods, reinforcing its value in enhancing speech recognition under challenging acoustic conditions.
+
+####----REFERENCES---- 
+#Orimoto, H., Ikuta, A., & Hasegawa, K. (2021). Speech Signal Detection Based on Bayesian Estimation by Observing Air-Conducted Speech under Existence of Surrounding Noise with the Aid of Bone-Conducted Speech. Intelligent Information Management, 13(04), 199–213. https://doi.org/10.4236/iim.2021.134011
+
+#Gong, Y. (1995). Speech recognition in noisy environments: A survey. Speech Communication, 16(3), 261–291. https://doi.org/10.1016/0167-6393(94)00059-j
+
+#Tom ́aˇs Kreisinger, Pavel Sovka, Petr Poll ́ak, & Uhl ́ıˇr, J. (1998). Experimental Study of Speech Recognition in Noisy Environments. Applied and Numerical Harmonic Analysis, 455–466. https://doi.org/10.1007/978-1-4612-1768-8 32
